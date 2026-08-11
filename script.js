@@ -105,8 +105,10 @@ function onPlayerStateChange(event) {
 
 function onPlayerError(event) {
     console.error("YouTube Player Error:", event.data);
-    trackTitle.textContent = "Error loading video";
-    setTimeout(() => ytPlayer.nextVideo(), 2000);
+    trackTitle.textContent = "Skipped (Embed Restricted)";
+    trackArtist.textContent = "Copyright owner blocked embeds";
+    // Automatically skip to the next video after showing the message
+    setTimeout(() => ytPlayer.nextVideo(), 2500);
 }
 
 // --- UI Updates ---
