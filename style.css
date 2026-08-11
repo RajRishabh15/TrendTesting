@@ -97,6 +97,34 @@ body {
     align-items: center;
 }
 
+.top-left-group {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.social-link {
+    background: var(--glass-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-main);
+    text-decoration: none;
+    transition: all 0.3s ease;
+}
+
+.social-link:hover {
+    background: rgba(255, 255, 255, 0.15);
+    color: var(--primary-color);
+    transform: translateY(-2px);
+}
+
 .location-badge {
     background: var(--glass-bg);
     backdrop-filter: blur(12px);
