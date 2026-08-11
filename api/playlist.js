@@ -1,6 +1,6 @@
 export default async function handler(req, res) {
-    const SPOTIFY_CLIENT_ID = process.env.SPOTIFY_CLIENT_ID;
-    const SPOTIFY_CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET;
+    const SPOTIFY_CLIENT_ID = process.env.SPOTIFY_CLIENT_ID || "ec3ff927646047ff8513827c9d5e9f7f";
+    const SPOTIFY_CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET || "50d5ab4f45de49c097eb9166a518940a";
     const SPOTIFY_PLAYLIST_ID = "0N1ykhK4tlemvHW0UU44H6";
 
     if (!SPOTIFY_CLIENT_ID || !SPOTIFY_CLIENT_SECRET) {
