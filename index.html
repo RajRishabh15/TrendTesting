@@ -92,9 +92,13 @@
         </div>
     </main>
 
-    <!-- Audio Element (hidden) -->
-    <audio id="audio-element"></audio>
+    <!-- YouTube Player (hidden) -->
+    <div id="yt-player-container" style="position: absolute; top: -9999px; left: -9999px; width: 1px; height: 1px; opacity: 0; pointer-events: none;">
+        <div id="yt-player"></div>
+    </div>
     
+    <!-- YouTube IFrame API -->
+    <script src="https://www.youtube.com/iframe_api"></script>
     <script src="script.js"></script>
 </body>
 </html>

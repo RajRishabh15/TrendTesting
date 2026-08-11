@@ -1,19 +1,13 @@
-// The playlist data will now be fetched from the secure Vercel API route (/api/playlist)
-
-// Placeholder audio URLs to use since full Spotify streaming requires Premium/OAuth
-const placeholderAudio = [
-    "assets/song1.mp3",
-    "assets/song2.mp3",
-    "assets/song3.mp3"
-];
+// --- YouTube Configuration ---
+const YOUTUBE_PLAYLIST_ID = "PLZDGO4vMh5jk";
 
 // --- State ---
-let playlist = [];
-let currentTrackIndex = 0;
+let ytPlayer;
 let isPlaying = false;
+let isPlayerReady = false;
+let updateTimeInterval;
 
 // --- DOM Elements ---
-const audioElement = document.getElementById('audio-element');
 const playBtn = document.getElementById('play-btn');
 const prevBtn = document.getElementById('prev-btn');
 const nextBtn = document.getElementById('next-btn');
@@ -33,124 +27,139 @@ const volumeSlider = document.getElementById('volume-slider');
 const timeIndicator = document.getElementById('current-time');
 
 // --- Initialization ---
-async function init() {
+function init() {
     updateTime();
     setInterval(updateTime, 60000); // Update time every minute
     initParallax();
     initParticles();
-
-    trackTitle.textContent = "Loading Playlist...";
-    trackArtist.textContent = "Connecting to Spotify...";
     
-    try {
-        await fetchSpotifyPlaylist();
-    } catch (error) {
-        console.error("Error fetching Spotify playlist:", error);
-        setupFallbackPlaylist();
-    }
-
-    if (playlist.length > 0) {
-        loadTrack(currentTrackIndex);
-    }
+    trackTitle.textContent = "Loading Playlist...";
+    trackArtist.textContent = "Connecting to YouTube...";
 }
 
-// --- Spotify API Logic ---
-async function fetchSpotifyPlaylist() {
-    // Fetch from our secure Vercel Serverless Function
-    const response = await fetch('/api/playlist');
-    
-    if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to fetch playlist from API");
-    }
-    
-    const playlistData = await response.json();
-
-    // Map to our custom playlist structure
-    playlist = playlistData.items.filter(item => item.track).map((item, index) => {
-        const track = item.track;
-        // Cycle through placeholder audio
-        const audioSrc = placeholderAudio[index % placeholderAudio.length];
-        
-        return {
-            title: track.name,
-            artist: track.artists.map(a => a.name).join(", "),
-            audio: audioSrc,
-            artwork: track.album.images[0]?.url || 'assets/album_art_1.png'
-        };
+// --- YouTube IFrame API ---
+// This function is automatically called by the YouTube IFrame API script when it loads
+window.onYouTubeIframeAPIReady = function() {
+    ytPlayer = new YT.Player('yt-player', {
+        height: '1',
+        width: '1',
+        playerVars: {
+            listType: 'playlist',
+            list: YOUTUBE_PLAYLIST_ID,
+            autoplay: 0,
+            controls: 0,
+            disablekb: 1,
+            fs: 0,
+            rel: 0
+        },
+        events: {
+            'onReady': onPlayerReady,
+            'onStateChange': onPlayerStateChange,
+            'onError': onPlayerError
+        }
     });
 }
 
-function setupFallbackPlaylist() {
-    // Fallback if credentials are missing or API fails
-    playlist = [
-        {
-            title: "Waiting for Spotify Key",
-            artist: "Add your API credentials",
-            audio: placeholderAudio[0],
-            artwork: "assets/album_art_1.png"
-        },
-        {
-            title: "Yamuna Aarti (Placeholder)",
-            artist: "Devotional Instrumental",
-            audio: placeholderAudio[1],
-            artwork: "assets/album_art_2.png"
+function onPlayerReady(event) {
+    isPlayerReady = true;
+    // Set initial volume
+    ytPlayer.setVolume(volumeSlider.value);
+    
+    trackTitle.textContent = "Ready to Play";
+    trackArtist.textContent = "Click Play to Start";
+}
+
+function onPlayerStateChange(event) {
+    // When video starts playing (State 1)
+    if (event.data === YT.PlayerState.PLAYING) {
+        isPlaying = true;
+        playingBars.classList.add('active');
+        playIcon.innerHTML = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>'; // Pause icon SVG
+        
+        // Start updating progress bar
+        clearInterval(updateTimeInterval);
+        updateTimeInterval = setInterval(updateProgressBar, 1000);
+        
+        // Extract metadata from the currently playing video
+        const videoData = ytPlayer.getVideoData();
+        updateUI(videoData);
+        
+    } else if (event.data === YT.PlayerState.PAUSED || event.data === YT.PlayerState.ENDED) {
+        isPlaying = false;
+        playingBars.classList.remove('active');
+        playIcon.innerHTML = '<path d="M8 5v14l11-7z"/>'; // Play icon SVG
+        clearInterval(updateTimeInterval);
+        
+    } else if (event.data === YT.PlayerState.UNSTARTED) {
+        // Just loaded a new video
+        const videoData = ytPlayer.getVideoData();
+        if (videoData && videoData.title) {
+            updateUI(videoData);
         }
-    ];
+    }
 }
 
-// --- Audio Player Logic ---
-function loadTrack(index) {
-    if (playlist.length === 0) return;
+function onPlayerError(event) {
+    console.error("YouTube Player Error:", event.data);
+    trackTitle.textContent = "Error loading video";
+    trackArtist.textContent = "Skipping to next...";
+    // Automatically skip to the next video on error (e.g., if a video is deleted/private)
+    setTimeout(() => ytPlayer.nextVideo(), 2000);
+}
+
+// --- UI Updates ---
+function updateUI(videoData) {
+    if (!videoData || !videoData.title) return;
     
-    const track = playlist[index];
-    audioElement.src = track.audio;
-    trackTitle.textContent = track.title;
-    trackArtist.textContent = track.artist;
+    trackTitle.textContent = videoData.title;
+    trackArtist.textContent = videoData.author;
     
-    // Add a subtle fade animation when changing art
-    trackArt.style.opacity = 0;
-    setTimeout(() => {
-        trackArt.src = track.artwork;
-        trackArt.style.opacity = 1;
-    }, 300); // Wait for fade out to complete before swapping src
+    // Fetch high-quality thumbnail (hqdefault is incredibly reliable for all videos)
+    const artworkUrl = `https://img.youtube.com/vi/${videoData.video_id}/hqdefault.jpg`;
+    
+    // Check if the artwork is actually different before fading to avoid flicker
+    if (!trackArt.src.includes(videoData.video_id)) {
+        trackArt.style.opacity = 0;
+        setTimeout(() => {
+            trackArt.src = artworkUrl;
+            trackArt.style.opacity = 1;
+        }, 300);
+    }
 }
 
-function playTrack() {
-    if (playlist.length === 0) return;
-    audioElement.play();
-    isPlaying = true;
-    playingBars.classList.add('active');
-    playIcon.innerHTML = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>'; // Pause icon SVG
+function updateProgressBar() {
+    if (!isPlayerReady || !isPlaying) return;
+    
+    const currentTime = ytPlayer.getCurrentTime() || 0;
+    const duration = ytPlayer.getDuration() || 0;
+    
+    if (duration > 0) {
+        const progressPercent = (currentTime / duration) * 100;
+        progressFill.style.width = `${progressPercent}%`;
+        currentTimeDisplay.textContent = formatTime(currentTime);
+        durationDisplay.textContent = formatTime(duration);
+    }
 }
 
-function pauseTrack() {
-    audioElement.pause();
-    isPlaying = false;
-    playingBars.classList.remove('active');
-    playIcon.innerHTML = '<path d="M8 5v14l11-7z"/>'; // Play icon SVG
-}
-
+// --- Player Controls ---
 function togglePlay() {
+    if (!isPlayerReady) return;
+    
     if (isPlaying) {
-        pauseTrack();
+        ytPlayer.pauseVideo();
     } else {
-        playTrack();
+        ytPlayer.playVideo();
     }
 }
 
 function nextTrack() {
-    if (playlist.length === 0) return;
-    currentTrackIndex = (currentTrackIndex + 1) % playlist.length;
-    loadTrack(currentTrackIndex);
-    if (isPlaying) playTrack();
+    if (!isPlayerReady) return;
+    ytPlayer.nextVideo();
 }
 
 function prevTrack() {
-    if (playlist.length === 0) return;
-    currentTrackIndex = (currentTrackIndex - 1 + playlist.length) % playlist.length;
-    loadTrack(currentTrackIndex);
-    if (isPlaying) playTrack();
+    if (!isPlayerReady) return;
+    ytPlayer.previousVideo();
 }
 
 // --- Event Listeners ---
@@ -158,34 +167,25 @@ playBtn.addEventListener('click', togglePlay);
 nextBtn.addEventListener('click', nextTrack);
 prevBtn.addEventListener('click', prevTrack);
 
-// Audio Events
-audioElement.addEventListener('ended', nextTrack);
-
-audioElement.addEventListener('timeupdate', () => {
-    if (audioElement.duration) {
-        const progressPercent = (audioElement.currentTime / audioElement.duration) * 100;
-        progressFill.style.width = `${progressPercent}%`;
-        currentTimeDisplay.textContent = formatTime(audioElement.currentTime);
-    }
-});
-
-audioElement.addEventListener('loadedmetadata', () => {
-    durationDisplay.textContent = formatTime(audioElement.duration);
-});
-
 // Progress Bar Scrubbing
 progressBg.addEventListener('click', (e) => {
+    if (!isPlayerReady) return;
+    
     const width = progressBg.clientWidth;
     const clickX = e.offsetX;
-    const duration = audioElement.duration;
-    if (duration) {
-        audioElement.currentTime = (clickX / width) * duration;
+    const duration = ytPlayer.getDuration();
+    
+    if (duration > 0) {
+        const seekTime = (clickX / width) * duration;
+        ytPlayer.seekTo(seekTime, true);
     }
 });
 
 // Volume Control
 volumeSlider.addEventListener('input', (e) => {
-    audioElement.volume = e.target.value / 100;
+    if (isPlayerReady) {
+        ytPlayer.setVolume(e.target.value);
+    }
 });
 
 // --- Utility Functions ---
