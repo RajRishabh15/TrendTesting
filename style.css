@@ -380,6 +380,7 @@ body {
 #volume-slider {
     width: 80px;
     -webkit-appearance: none;
+    appearance: none;
     background: rgba(255, 255, 255, 0.2);
     height: 4px;
     border-radius: 2px;
@@ -388,6 +389,7 @@ body {
 
 #volume-slider::-webkit-slider-thumb {
     -webkit-appearance: none;
+    appearance: none;
     width: 10px;
     height: 10px;
     border-radius: 50%;
