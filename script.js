@@ -31,7 +31,7 @@ const timeIndicator = document.getElementById('current-time');
 const playlistToggleBtn = document.getElementById('playlist-toggle-btn');
 const closeSidebarBtn = document.getElementById('close-sidebar-btn');
 const playlistSidebar = document.getElementById('playlist-sidebar');
-const sidebarGrid = document.getElementById('sidebar-grid');
+const sidebarList = document.getElementById('sidebar-list');
 
 // --- Initialization ---
 function init() {
@@ -168,32 +168,59 @@ function populateSidebar() {
     
     const currentIndex = ytPlayer.getPlaylistIndex();
     
-    // If we already built the grid, just update the active class for performance
-    if (sidebarGrid.children.length === playlistIds.length) {
-        Array.from(sidebarGrid.children).forEach((item, idx) => {
+    // If we already built the list, just update the active class for performance
+    if (sidebarList.children.length === playlistIds.length) {
+        Array.from(sidebarList.children).forEach((item, idx) => {
             item.classList.toggle('active', idx === currentIndex);
         });
         return;
     }
     
-    // Build the grid initially
-    sidebarGrid.innerHTML = '';
+    // Build the list initially
+    sidebarList.innerHTML = '';
     playlistIds.forEach((id, index) => {
         const item = document.createElement('div');
         item.className = `playlist-item ${index === currentIndex ? 'active' : ''}`;
         
+        // Image Container
+        const imgContainer = document.createElement('div');
+        imgContainer.className = 'playlist-item-img';
         const img = document.createElement('img');
         img.src = `https://img.youtube.com/vi/${id}/hqdefault.jpg`;
         img.alt = `Track ${index + 1}`;
+        imgContainer.appendChild(img);
         
-        item.appendChild(img);
+        // Info Container (Title)
+        const infoContainer = document.createElement('div');
+        infoContainer.className = 'playlist-item-info';
+        const titleEl = document.createElement('div');
+        titleEl.className = 'playlist-item-title';
+        titleEl.textContent = `Loading track ${index + 1}...`; // Placeholder
+        infoContainer.appendChild(titleEl);
+        
+        item.appendChild(imgContainer);
+        item.appendChild(infoContainer);
         
         item.addEventListener('click', () => {
             ytPlayer.playVideoAt(index);
             if (window.innerWidth < 900) toggleSidebar(); // Close on mobile after selection
         });
         
-        sidebarGrid.appendChild(item);
+        sidebarList.appendChild(item);
+        
+        // Asynchronously fetch the actual YouTube video title without an API key!
+        fetch(`https://noembed.com/embed?url=https://www.youtube.com/watch?v=${id}`)
+            .then(res => res.json())
+            .then(data => {
+                if (data && data.title) {
+                    titleEl.textContent = data.title;
+                } else {
+                    titleEl.textContent = `Track ${index + 1}`;
+                }
+            })
+            .catch(() => {
+                titleEl.textContent = `Track ${index + 1}`;
+            });
     });
 }
 
