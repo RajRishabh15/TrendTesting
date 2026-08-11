@@ -2,9 +2,9 @@
 
 // Placeholder audio URLs to use since full Spotify streaming requires Premium/OAuth
 const placeholderAudio = [
-    "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
-    "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
-    "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3"
+    "assets/song1.mp3",
+    "assets/song2.mp3",
+    "assets/song3.mp3"
 ];
 
 // --- State ---
@@ -107,13 +107,13 @@ function loadTrack(index) {
     audioElement.src = track.audio;
     trackTitle.textContent = track.title;
     trackArtist.textContent = track.artist;
-    trackArt.src = track.artwork;
     
     // Add a subtle fade animation when changing art
     trackArt.style.opacity = 0;
     setTimeout(() => {
+        trackArt.src = track.artwork;
         trackArt.style.opacity = 1;
-    }, 150);
+    }, 300); // Wait for fade out to complete before swapping src
 }
 
 function playTrack() {
