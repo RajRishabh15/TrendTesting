@@ -1,9 +1,4 @@
-// --- Spotify API Configuration ---
-// TO DO: Replace these with your actual Spotify credentials.
-// See the instructions provided to learn how to get these.
-const SPOTIFY_CLIENT_ID = "";
-const SPOTIFY_CLIENT_SECRET = "";
-const SPOTIFY_PLAYLIST_ID = "0N1ykhK4tlemvHW0UU44H6";
+// The playlist data will now be fetched from the secure Vercel API route (/api/playlist)
 
 // Placeholder audio URLs to use since full Spotify streaming requires Premium/OAuth
 const placeholderAudio = [
@@ -44,16 +39,13 @@ async function init() {
     initParallax();
     initParticles();
 
-    if (SPOTIFY_CLIENT_ID && SPOTIFY_CLIENT_SECRET) {
-        trackTitle.textContent = "Loading Playlist...";
-        trackArtist.textContent = "Connecting to Spotify";
-        try {
-            await fetchSpotifyPlaylist();
-        } catch (error) {
-            console.error("Error fetching Spotify playlist:", error);
-            setupFallbackPlaylist();
-        }
-    } else {
+    trackTitle.textContent = "Loading Playlist...";
+    trackArtist.textContent = "Connecting to Spotify...";
+    
+    try {
+        await fetchSpotifyPlaylist();
+    } catch (error) {
+        console.error("Error fetching Spotify playlist:", error);
         setupFallbackPlaylist();
     }
 
@@ -64,31 +56,17 @@ async function init() {
 
 // --- Spotify API Logic ---
 async function fetchSpotifyPlaylist() {
-    // 1. Get Access Token (Client Credentials Flow)
-    const tokenResponse = await fetch('https://accounts.spotify.com/api/token', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'Authorization': 'Basic ' + btoa(SPOTIFY_CLIENT_ID + ':' + SPOTIFY_CLIENT_SECRET)
-        },
-        body: 'grant_type=client_credentials'
-    });
+    // Fetch from our secure Vercel Serverless Function
+    const response = await fetch('/api/playlist');
+    
+    if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to fetch playlist from API");
+    }
+    
+    const playlistData = await response.json();
 
-    if (!tokenResponse.ok) throw new Error("Failed to authenticate with Spotify");
-    const tokenData = await tokenResponse.json();
-    const accessToken = tokenData.access_token;
-
-    // 2. Fetch Playlist Data
-    const playlistResponse = await fetch(`https://api.spotify.com/v1/playlists/${SPOTIFY_PLAYLIST_ID}/tracks?limit=50`, {
-        headers: {
-            'Authorization': `Bearer ${accessToken}`
-        }
-    });
-
-    if (!playlistResponse.ok) throw new Error("Failed to fetch playlist");
-    const playlistData = await playlistResponse.json();
-
-    // 3. Map to our custom playlist structure
+    // Map to our custom playlist structure
     playlist = playlistData.items.filter(item => item.track).map((item, index) => {
         const track = item.track;
         // Cycle through placeholder audio
