@@ -5,7 +5,7 @@ const YOUTUBE_PLAYLIST_ID = "PLZDGO4vMh5jk";
 let ytPlayer;
 let isPlaying = false;
 let isPlayerReady = false;
-let updateTimeInterval;
+let animationFrameId;
 
 // --- DOM Elements ---
 const playBtn = document.getElementById('play-btn');
@@ -15,6 +15,7 @@ const playIcon = document.getElementById('play-icon');
 
 const trackTitle = document.getElementById('track-title');
 const trackArtist = document.getElementById('track-artist');
+const trackInfoInner = document.getElementById('track-info-inner');
 const trackArt = document.getElementById('track-art');
 const playingBars = document.getElementById('playing-bars');
 
@@ -25,6 +26,12 @@ const durationDisplay = document.getElementById('duration-display');
 
 const volumeSlider = document.getElementById('volume-slider');
 const timeIndicator = document.getElementById('current-time');
+
+// Sidebar Elements
+const playlistToggleBtn = document.getElementById('playlist-toggle-btn');
+const closeSidebarBtn = document.getElementById('close-sidebar-btn');
+const playlistSidebar = document.getElementById('playlist-sidebar');
+const sidebarGrid = document.getElementById('sidebar-grid');
 
 // --- Initialization ---
 function init() {
@@ -38,7 +45,6 @@ function init() {
 }
 
 // --- YouTube IFrame API ---
-// This function is automatically called by the YouTube IFrame API script when it loads
 window.onYouTubeIframeAPIReady = function() {
     ytPlayer = new YT.Player('yt-player', {
         height: '1',
@@ -62,7 +68,6 @@ window.onYouTubeIframeAPIReady = function() {
 
 function onPlayerReady(event) {
     isPlayerReady = true;
-    // Set initial volume
     ytPlayer.setVolume(volumeSlider.value);
     
     trackTitle.textContent = "Ready to Play";
@@ -70,40 +75,37 @@ function onPlayerReady(event) {
 }
 
 function onPlayerStateChange(event) {
-    // When video starts playing (State 1)
     if (event.data === YT.PlayerState.PLAYING) {
         isPlaying = true;
         playingBars.classList.add('active');
-        playIcon.innerHTML = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>'; // Pause icon SVG
+        playIcon.innerHTML = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>'; // Pause icon
         
-        // Start updating progress bar
-        clearInterval(updateTimeInterval);
-        updateTimeInterval = setInterval(updateProgressBar, 1000);
+        // Start live synced progress bar
+        cancelAnimationFrame(animationFrameId);
+        updateProgressBar();
         
-        // Extract metadata from the currently playing video
         const videoData = ytPlayer.getVideoData();
         updateUI(videoData);
+        populateSidebar(); // Update active state in sidebar
         
     } else if (event.data === YT.PlayerState.PAUSED || event.data === YT.PlayerState.ENDED) {
         isPlaying = false;
         playingBars.classList.remove('active');
-        playIcon.innerHTML = '<path d="M8 5v14l11-7z"/>'; // Play icon SVG
-        clearInterval(updateTimeInterval);
+        playIcon.innerHTML = '<path d="M8 5v14l11-7z"/>'; // Play icon
+        cancelAnimationFrame(animationFrameId);
         
-    } else if (event.data === YT.PlayerState.UNSTARTED) {
-        // Just loaded a new video
+    } else if (event.data === YT.PlayerState.UNSTARTED || event.data === YT.PlayerState.CUED) {
         const videoData = ytPlayer.getVideoData();
         if (videoData && videoData.title) {
             updateUI(videoData);
         }
+        populateSidebar(); // Build sidebar if not built yet
     }
 }
 
 function onPlayerError(event) {
     console.error("YouTube Player Error:", event.data);
     trackTitle.textContent = "Error loading video";
-    trackArtist.textContent = "Skipping to next...";
-    // Automatically skip to the next video on error (e.g., if a video is deleted/private)
     setTimeout(() => ytPlayer.nextVideo(), 2000);
 }
 
@@ -111,13 +113,19 @@ function onPlayerError(event) {
 function updateUI(videoData) {
     if (!videoData || !videoData.title) return;
     
-    trackTitle.textContent = videoData.title;
-    trackArtist.textContent = videoData.author;
+    // Smooth translation effect for text
+    trackInfoInner.style.transform = 'translateY(10px)';
+    trackInfoInner.style.opacity = '0';
     
-    // Fetch high-quality thumbnail (hqdefault is incredibly reliable for all videos)
+    setTimeout(() => {
+        trackTitle.textContent = videoData.title;
+        trackArtist.textContent = videoData.author;
+        trackInfoInner.style.transform = 'translateY(0)';
+        trackInfoInner.style.opacity = '1';
+    }, 200);
+    
     const artworkUrl = `https://img.youtube.com/vi/${videoData.video_id}/hqdefault.jpg`;
     
-    // Check if the artwork is actually different before fading to avoid flicker
     if (!trackArt.src.includes(videoData.video_id)) {
         trackArt.style.opacity = 0;
         setTimeout(() => {
@@ -139,54 +147,102 @@ function updateProgressBar() {
         currentTimeDisplay.textContent = formatTime(currentTime);
         durationDisplay.textContent = formatTime(duration);
     }
+    
+    // Live perfectly smooth sync using requestAnimationFrame
+    animationFrameId = requestAnimationFrame(updateProgressBar);
+}
+
+// --- Playlist Sidebar Logic ---
+function toggleSidebar() {
+    playlistSidebar.classList.toggle('open');
+}
+
+playlistToggleBtn.addEventListener('click', toggleSidebar);
+closeSidebarBtn.addEventListener('click', toggleSidebar);
+
+function populateSidebar() {
+    if (!isPlayerReady) return;
+    
+    const playlistIds = ytPlayer.getPlaylist();
+    if (!playlistIds || playlistIds.length === 0) return;
+    
+    const currentIndex = ytPlayer.getPlaylistIndex();
+    
+    // If we already built the grid, just update the active class for performance
+    if (sidebarGrid.children.length === playlistIds.length) {
+        Array.from(sidebarGrid.children).forEach((item, idx) => {
+            item.classList.toggle('active', idx === currentIndex);
+        });
+        return;
+    }
+    
+    // Build the grid initially
+    sidebarGrid.innerHTML = '';
+    playlistIds.forEach((id, index) => {
+        const item = document.createElement('div');
+        item.className = `playlist-item ${index === currentIndex ? 'active' : ''}`;
+        
+        const img = document.createElement('img');
+        img.src = `https://img.youtube.com/vi/${id}/hqdefault.jpg`;
+        img.alt = `Track ${index + 1}`;
+        
+        item.appendChild(img);
+        
+        item.addEventListener('click', () => {
+            ytPlayer.playVideoAt(index);
+            if (window.innerWidth < 900) toggleSidebar(); // Close on mobile after selection
+        });
+        
+        sidebarGrid.appendChild(item);
+    });
 }
 
 // --- Player Controls ---
-function togglePlay() {
+playBtn.addEventListener('click', () => {
     if (!isPlayerReady) return;
+    if (isPlaying) ytPlayer.pauseVideo();
+    else ytPlayer.playVideo();
+});
+
+nextBtn.addEventListener('click', () => isPlayerReady && ytPlayer.nextVideo());
+prevBtn.addEventListener('click', () => isPlayerReady && ytPlayer.previousVideo());
+
+// Live smooth seeking logic
+let isDragging = false;
+
+progressBg.addEventListener('mousedown', (e) => {
+    isDragging = true;
+    seekToMouse(e);
+});
+
+document.addEventListener('mousemove', (e) => {
+    if (isDragging) seekToMouse(e);
+});
+
+document.addEventListener('mouseup', () => {
+    isDragging = false;
+});
+
+function seekToMouse(e) {
+    if (!isPlayerReady) return;
+    const rect = progressBg.getBoundingClientRect();
+    let x = e.clientX - rect.left;
+    x = Math.max(0, Math.min(x, rect.width)); // Clamp between 0 and width
     
-    if (isPlaying) {
-        ytPlayer.pauseVideo();
-    } else {
-        ytPlayer.playVideo();
-    }
-}
-
-function nextTrack() {
-    if (!isPlayerReady) return;
-    ytPlayer.nextVideo();
-}
-
-function prevTrack() {
-    if (!isPlayerReady) return;
-    ytPlayer.previousVideo();
-}
-
-// --- Event Listeners ---
-playBtn.addEventListener('click', togglePlay);
-nextBtn.addEventListener('click', nextTrack);
-prevBtn.addEventListener('click', prevTrack);
-
-// Progress Bar Scrubbing
-progressBg.addEventListener('click', (e) => {
-    if (!isPlayerReady) return;
-    
-    const width = progressBg.clientWidth;
-    const clickX = e.offsetX;
     const duration = ytPlayer.getDuration();
-    
     if (duration > 0) {
-        const seekTime = (clickX / width) * duration;
+        const seekTime = (x / rect.width) * duration;
+        progressFill.style.width = `${(x / rect.width) * 100}%`;
+        currentTimeDisplay.textContent = formatTime(seekTime);
+        
+        // Only actually tell YouTube to seek if we're not constantly firing
+        // For perfectly smooth feel, we seek instantly here.
         ytPlayer.seekTo(seekTime, true);
     }
-});
+}
 
 // Volume Control
-volumeSlider.addEventListener('input', (e) => {
-    if (isPlayerReady) {
-        ytPlayer.setVolume(e.target.value);
-    }
-});
+volumeSlider.addEventListener('input', (e) => isPlayerReady && ytPlayer.setVolume(e.target.value));
 
 // --- Utility Functions ---
 function formatTime(seconds) {
@@ -203,14 +259,13 @@ function updateTime() {
     const ampm = hours >= 12 ? 'PM' : 'AM';
     
     hours = hours % 12;
-    hours = hours ? hours : 12; // the hour '0' should be '12'
+    hours = hours ? hours : 12;
     const minutesStr = minutes < 10 ? '0' + minutes : minutes;
     
     timeIndicator.textContent = `${hours}:${minutesStr} ${ampm}`;
 }
 
 // --- Visual Effects ---
-// Parallax Background
 function initParallax() {
     const bg = document.getElementById('parallax-bg');
     document.addEventListener('mousemove', (e) => {
@@ -220,7 +275,6 @@ function initParallax() {
     });
 }
 
-// Floating Particles (Fireflies)
 function initParticles() {
     const container = document.getElementById('particles-container');
     const particleCount = 20;
@@ -228,8 +282,6 @@ function initParticles() {
     for (let i = 0; i < particleCount; i++) {
         const particle = document.createElement('div');
         particle.classList.add('particle');
-        
-        // Randomize properties
         const size = Math.random() * 4 + 1;
         const posX = Math.random() * 100;
         const delay = Math.random() * 10;
@@ -240,10 +292,8 @@ function initParticles() {
         particle.style.left = `${posX}vw`;
         particle.style.animationDelay = `${delay}s, ${Math.random() * 2}s`;
         particle.style.animationDuration = `${duration}s, 3s`;
-
         container.appendChild(particle);
     }
 }
 
-// Start everything
 window.addEventListener('DOMContentLoaded', init);
