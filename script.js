@@ -33,6 +33,12 @@ const closeSidebarBtn = document.getElementById('close-sidebar-btn');
 const playlistSidebar = document.getElementById('playlist-sidebar');
 const sidebarList = document.getElementById('sidebar-list');
 
+// Sidebar overlay (tap-outside to close on mobile)
+const sidebarOverlay = document.createElement('div');
+sidebarOverlay.className = 'sidebar-overlay';
+document.body.appendChild(sidebarOverlay);
+sidebarOverlay.addEventListener('click', closeSidebar);
+
 // --- Initialization ---
 function init() {
     updateTime();
@@ -155,12 +161,28 @@ function updateProgressBar() {
 }
 
 // --- Playlist Sidebar Logic ---
+function openSidebar() {
+    playlistSidebar.classList.add('open');
+    sidebarOverlay.classList.add('visible');
+    document.body.style.overflow = 'hidden'; // Prevent background scroll while sidebar open
+}
+
+function closeSidebar() {
+    playlistSidebar.classList.remove('open');
+    sidebarOverlay.classList.remove('visible');
+    document.body.style.overflow = '';
+}
+
 function toggleSidebar() {
-    playlistSidebar.classList.toggle('open');
+    if (playlistSidebar.classList.contains('open')) {
+        closeSidebar();
+    } else {
+        openSidebar();
+    }
 }
 
 playlistToggleBtn.addEventListener('click', toggleSidebar);
-closeSidebarBtn.addEventListener('click', toggleSidebar);
+closeSidebarBtn.addEventListener('click', closeSidebar);
 
 function populateSidebar() {
     if (!isPlayerReady) return;
@@ -205,7 +227,7 @@ function populateSidebar() {
         
         item.addEventListener('click', () => {
             ytPlayer.playVideoAt(index);
-            if (window.innerWidth < 900) toggleSidebar(); // Close on mobile after selection
+            if (window.innerWidth < 900) closeSidebar(); // Close on mobile after selection
         });
         
         sidebarList.appendChild(item);
@@ -239,23 +261,42 @@ prevBtn.addEventListener('click', () => isPlayerReady && ytPlayer.previousVideo(
 // Live smooth seeking logic
 let isDragging = false;
 
+// ---- Mouse events (desktop) ----
 progressBg.addEventListener('mousedown', (e) => {
     isDragging = true;
-    seekToMouse(e);
+    seekToPosition(e.clientX);
 });
 
 document.addEventListener('mousemove', (e) => {
-    if (isDragging) seekToMouse(e);
+    if (isDragging) seekToPosition(e.clientX);
 });
 
 document.addEventListener('mouseup', () => {
     isDragging = false;
 });
 
-function seekToMouse(e) {
+// ---- Touch events (mobile) ----
+progressBg.addEventListener('touchstart', (e) => {
+    e.preventDefault(); // Prevent scroll interference
+    isDragging = true;
+    seekToPosition(e.touches[0].clientX);
+}, { passive: false });
+
+document.addEventListener('touchmove', (e) => {
+    if (isDragging) {
+        e.preventDefault();
+        seekToPosition(e.touches[0].clientX);
+    }
+}, { passive: false });
+
+document.addEventListener('touchend', () => {
+    isDragging = false;
+});
+
+function seekToPosition(clientX) {
     if (!isPlayerReady) return;
     const rect = progressBg.getBoundingClientRect();
-    let x = e.clientX - rect.left;
+    let x = clientX - rect.left;
     x = Math.max(0, Math.min(x, rect.width)); // Clamp between 0 and width
     
     const duration = ytPlayer.getDuration();
@@ -263,9 +304,6 @@ function seekToMouse(e) {
         const seekTime = (x / rect.width) * duration;
         progressFill.style.width = `${(x / rect.width) * 100}%`;
         currentTimeDisplay.textContent = formatTime(seekTime);
-        
-        // Only actually tell YouTube to seek if we're not constantly firing
-        // For perfectly smooth feel, we seek instantly here.
         ytPlayer.seekTo(seekTime, true);
     }
 }
@@ -296,6 +334,8 @@ function updateTime() {
 
 // --- Visual Effects ---
 function initParallax() {
+    // Skip parallax on touch devices — saves battery and prevents jarring movement
+    if (window.matchMedia('(hover: none)').matches) return;
     const bg = document.getElementById('parallax-bg');
     document.addEventListener('mousemove', (e) => {
         const x = (window.innerWidth - e.pageX * 2) / 90;
